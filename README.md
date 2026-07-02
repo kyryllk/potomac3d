@@ -1,5 +1,7 @@
 # 2015 W. Potomac · Unit #3 — 3D reference space
 
+**Live:** https://kyryllk.github.io/potomac3d/
+
 A little 3D model of the apartment you can spin around, plus a furniture
 sandbox for trying out sizes and layouts. Runs entirely in the browser — no
 install, no build step.
