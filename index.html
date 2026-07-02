@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>2015 W. Potomac · Unit #3 — 3D</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <header class="titlebar">
+    <div class="title">2015 W. Potomac <span class="unit">Unit #3</span></div>
+    <div class="subtitle">3D reference space</div>
+  </header>
+
+  <!-- Add furniture -->
+  <aside class="panel panel--left" id="palette">
+    <div class="panel__head">
+      <h2>Add furniture</h2>
+      <button class="icon-btn" id="palette-collapse" title="Hide panel" aria-label="Hide panel">‹</button>
+    </div>
+    <div class="panel__body" id="palette-body"><!-- filled by ui.js --></div>
+  </aside>
+
+  <!-- Inspector + tools -->
+  <aside class="panel panel--right" id="inspector">
+    <!-- Selection -->
+    <section class="block" id="selection">
+      <div class="panel__head"><h2>Selection</h2></div>
+
+      <div class="empty" id="sel-empty">
+        Nothing selected. Click a piece to move (press &amp; hold to drag), rotate,
+        resize, or recolor it. Click a room to see its size.
+      </div>
+
+      <!-- Furniture -->
+      <div class="sel-fields" id="sel-furniture" hidden>
+        <div class="sel-name" id="furn-name">—</div>
+        <div class="field-row">
+          <label>Width<span id="w-ft" class="ft"></span>
+            <div class="num"><input type="number" id="dim-w" min="1" step="1" /><span>in</span></div>
+          </label>
+          <label>Depth<span id="d-ft" class="ft"></span>
+            <div class="num"><input type="number" id="dim-d" min="1" step="1" /><span>in</span></div>
+          </label>
+          <label>Height<span id="h-ft" class="ft"></span>
+            <div class="num"><input type="number" id="dim-h" min="1" step="1" /><span>in</span></div>
+          </label>
+        </div>
+        <div class="field-row">
+          <label>Rotation
+            <div class="num"><input type="number" id="rot" step="15" /><span>°</span></div>
+          </label>
+          <label>Color
+            <input type="color" id="color" class="color" />
+          </label>
+        </div>
+        <p class="tip">Press and hold the piece to slide it. Drag the ring to rotate.</p>
+        <button class="btn btn--danger" id="furn-delete">Delete piece</button>
+      </div>
+
+      <!-- Door -->
+      <div class="sel-fields" id="sel-door" hidden>
+        <div class="sel-name">Door</div>
+        <div class="field-row">
+          <label>Width<span id="door-w-ft" class="ft"></span>
+            <div class="num"><input type="number" id="door-w" min="12" step="1" /><span>in</span></div>
+          </label>
+          <label>Height<span id="door-h-ft" class="ft"></span>
+            <div class="num"><input type="number" id="door-h" min="12" step="1" /><span>in</span></div>
+          </label>
+        </div>
+        <p class="tip">Press and hold to slide the door along its wall.</p>
+        <button class="btn btn--danger" id="door-delete">Delete door</button>
+      </div>
+
+      <!-- Room -->
+      <div class="sel-fields" id="sel-room" hidden>
+        <div class="sel-name" id="room-name">—</div>
+        <div class="room-dims" id="room-dims">—</div>
+        <div class="room-area" id="room-area">—</div>
+      </div>
+    </section>
+
+    <!-- Tools -->
+    <section class="block">
+      <div class="panel__head"><h2>Tools</h2></div>
+      <div class="row"><button class="btn" id="add-door">Add a door</button></div>
+      <div class="doorhint" id="door-hint" hidden>Click a wall to drop a door.</div>
+    </section>
+
+    <!-- View -->
+    <section class="block">
+      <div class="panel__head"><h2>View</h2></div>
+      <label class="row">Walls
+        <div class="seg seg--sm" id="wall-seg">
+          <button data-mode="full" class="seg__btn is-on">Full</button>
+          <button data-mode="half" class="seg__btn">Half</button>
+          <button data-mode="quarter" class="seg__btn">¼</button>
+          <button data-mode="hidden" class="seg__btn">Off</button>
+        </div>
+      </label>
+      <label class="row toggle">Dimensions
+        <input type="checkbox" id="toggle-dims" />
+      </label>
+      <label class="row toggle">Room labels
+        <input type="checkbox" id="toggle-labels" checked />
+      </label>
+      <label class="row toggle">Grid
+        <input type="checkbox" id="toggle-grid" checked />
+      </label>
+      <div class="row btns2">
+        <button class="btn" id="view-reset">Reset view</button>
+        <button class="btn" id="view-top">Top-down</button>
+      </div>
+    </section>
+
+    <!-- Layout -->
+    <section class="block">
+      <div class="panel__head"><h2>Layout</h2></div>
+      <div class="row btns2">
+        <button class="btn" id="layout-export">Export…</button>
+        <button class="btn" id="layout-import">Import…</button>
+      </div>
+      <button class="btn btn--ghost" id="layout-clear">Clear all furniture</button>
+      <div class="saved">Saved to this browser automatically</div>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </section>
+  </aside>
+
+  <footer class="hint">
+    Drag to orbit · scroll to zoom · right-drag to pan · hold a piece to move · <kbd>Del</kbd> removes selected
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
