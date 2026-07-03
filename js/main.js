@@ -154,17 +154,17 @@ renderer.setAnimationLoop(() => {
         current: () => sync.room,
         currentFurniture: () => editor.items.map((i) => ({ id: i.id, label: i.label })),
         objectsByIds: (ids) => [...editor.items, ...editor.doors].filter((o) => ids.includes(o.id)),
-        allObjects: () => [...editor.items, ...editor.doors],
+        allObjects: () => [...editor.items, ...editor.doors, ...editor.measures],
       });
     } catch (e) {
       console.warn('Multiplayer unavailable, falling back to local-only:', e);
       setNetStatus('error');
       const saved = storage.load();
-      if (saved.items.length || saved.doors.length) editor.loadState(saved);
+      if (saved.items.length || saved.doors.length || saved.measures.length) editor.loadState(saved);
     }
   } else {
     const saved = storage.load();
-    if (saved.items.length || saved.doors.length) editor.loadState(saved);
+    if (saved.items.length || saved.doors.length || saved.measures.length) editor.loadState(saved);
     setNetStatus('offline');
   }
 })();

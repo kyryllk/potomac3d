@@ -16,14 +16,15 @@ const newSlug = () => `l${Date.now().toString(36)}${Math.random().toString(36).s
 
 // order-stable signature so a round-trip through the DB compares equal (no echo loop)
 function sig(o) {
-  return o.kind === 'door'
-    ? `d|${o.id}|${o.ax}|${r(o.cross)}|${r(o.along)}|${r(o.w)}|${r(o.h)}`
-    : `f|${o.id}|${o.type}|${r(o.x)}|${r(o.z)}|${r(o.ry, 3)}|${r(o.w)}|${r(o.d)}|${r(o.h)}|${o.color}`;
+  if (o.kind === 'door') return `d|${o.id}|${o.ax}|${r(o.cross)}|${r(o.along)}|${r(o.w)}|${r(o.h)}`;
+  if (o.kind === 'measure') return `m|${o.id}|${r(o.p1.x)}|${r(o.p1.z)}|${r(o.p2.x)}|${r(o.p2.z)}`;
+  return `f|${o.id}|${o.type}|${r(o.x)}|${r(o.z)}|${r(o.ry, 3)}|${r(o.w)}|${r(o.d)}|${r(o.h)}|${o.color}`;
 }
 
 // the fields stored in the row's `data` column (everything but id/kind/room)
 function payload(o) {
   if (o.kind === 'door') return { ax: o.ax, cross: o.cross, along: o.along, w: o.w, h: o.h };
+  if (o.kind === 'measure') return { p1: o.p1, p2: o.p2 };
   return { type: o.type, label: o.label, x: o.x, z: o.z, ry: o.ry, w: o.w, d: o.d, h: o.h, color: o.color };
 }
 
@@ -57,20 +58,22 @@ export class Sync {
   async _loadRoom() {
     const { data, error } = await this.sb.from('objects').select('*').eq('room', this.room);
     if (error) { console.warn('Supabase load failed:', error.message); this.onStatus('error', this.room); return; }
-    const items = [], doors = [];
+    const items = [], doors = [], measures = [];
     for (const row of data) {
       if (row.kind === 'layout') continue;
-      (row.kind === 'door' ? doors : items).push({ ...row.data, id: row.id, kind: row.kind });
+      if (row.kind === 'door') doors.push({ ...row.data, id: row.id, kind: 'door' });
+      else if (row.kind === 'measure') measures.push({ ...row.data, id: row.id, kind: 'measure' });
+      else items.push({ ...row.data, id: row.id, kind: 'furniture' });
     }
     this.applying = true;
-    this.editor.loadState({ items, doors });
+    this.editor.loadState({ items, doors, measures });
     this.applying = false;
     this._reseed();
   }
 
   _reseed() {
     this.snap.clear();
-    for (const o of [...this.editor.items, ...this.editor.doors]) this.snap.set(o.id, sig(o));
+    for (const o of [...this.editor.items, ...this.editor.doors, ...this.editor.measures]) this.snap.set(o.id, sig(o));
   }
 
   _remote(p) {
@@ -97,7 +100,7 @@ export class Sync {
   async push(state) {
     if (this.applying) return;
     const cur = new Map();
-    for (const o of [...state.items, ...state.doors]) cur.set(o.id, o);
+    for (const o of [...state.items, ...state.doors, ...(state.measures || [])]) cur.set(o.id, o);
     const upserts = [];
     for (const [id, o] of cur) {
       const s = sig(o);

@@ -100,6 +100,14 @@
         <button class="btn btn--danger" id="door-delete">Delete door</button>
       </div>
 
+      <!-- Measurement -->
+      <div class="sel-fields" id="sel-measure" hidden>
+        <div class="sel-name">Measurement</div>
+        <div class="room-dims" id="measure-dist">—</div>
+        <p class="tip">Drag the line to move it, or drag an end dot to adjust. <kbd>Del</kbd> removes it.</p>
+        <button class="btn btn--danger" id="measure-delete">Delete measurement</button>
+      </div>
+
       <!-- Room -->
       <div class="sel-fields" id="sel-room" hidden>
         <div class="sel-name" id="room-name">—</div>
@@ -111,8 +119,12 @@
     <!-- Tools -->
     <section class="block">
       <div class="panel__head"><h2>Tools</h2></div>
-      <div class="row"><button class="btn" id="add-door">Add a door</button></div>
+      <div class="row btns2">
+        <button class="btn" id="add-door">Add a door</button>
+        <button class="btn" id="add-measure">Measure</button>
+      </div>
       <div class="doorhint" id="door-hint" hidden>Click a wall to drop a door.</div>
+      <div class="doorhint" id="measure-hint" hidden>Click a start point, then an end point.</div>
     </section>
 
     <!-- View -->

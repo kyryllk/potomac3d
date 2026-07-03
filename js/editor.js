@@ -23,21 +23,26 @@ export class Editor {
 
     this.items = [];                 // furniture data
     this.doors = [];                 // door data
-    this.meshes = new Map();         // id → group (furniture + door panels)
+    this.measures = [];              // measurement markers
+    this.meshes = new Map();         // id → group (furniture + door panels + measures)
     this.selectedId = null;
     this.selectedKind = null;        // 'furniture' | 'door' | 'room' | null
     this.selectedRoom = null;
     this.dimsVisible = false;
     this.addDoorMode = false;
+    this.addMeasureMode = false;
+    this._pendingP1 = null;          // first click of a measurement in progress
     this.boundariesOn = false;       // keep furniture inside its room when dragging
     this.history = null;             // set by main.js; records undoable edits
 
     this.itemsGroup = new THREE.Group(); this.itemsGroup.name = 'furniture'; scene.add(this.itemsGroup);
     this.doorsGroup = new THREE.Group(); this.doorsGroup.name = 'doors'; scene.add(this.doorsGroup);
+    this.measuresGroup = new THREE.Group(); this.measuresGroup.name = 'measures'; scene.add(this.measuresGroup);
 
     this.onChange = () => {};
     this.onSelect = () => {};
     this.onModeChange = () => {};    // notify UI when add-door mode flips
+    this.onMeasureModeChange = () => {};
 
     this._ray = new THREE.Raycaster();
     this._floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -95,31 +100,42 @@ export class Editor {
   }
   _pickObject(e) {
     this._ray.setFromCamera(this._ndc(e), this.camera);
-    const hit = this._pick([...this.itemsGroup.children, ...this.doorsGroup.children]);
+    const hit = this._pick([...this.itemsGroup.children, ...this.doorsGroup.children, ...this.measuresGroup.children]);
     if (!hit) return null;
+    const part = hit.object.name;
     let o = hit.object;
     while (o && o.userData.id === undefined) o = o.parent;
-    return o ? { id: o.userData.id, kind: o.userData.kind } : null;
+    return o ? { id: o.userData.id, kind: o.userData.kind, part } : null;
   }
 
   _onDown(e) {
     this._down = { x: e.clientX, y: e.clientY };
-    if (this.addDoorMode || this.gizmo.axis != null) return;    // door placement / rotating
+    if (this.addDoorMode || this.addMeasureMode || this.gizmo.axis != null) return;
     const hit = this._pickObject(e);
     if (!hit) return;
     this.select(hit.id);
     const fp = this._floorPoint(e);
     const g = this.meshes.get(hit.id);
-    this._drag = {
-      id: hit.id, kind: hit.kind, moved: false,
-      offX: g.position.x - (fp?.x ?? g.position.x), offZ: g.position.z - (fp?.z ?? g.position.z),
-      before: this._snapshot([hit.id]),
-      room: hit.kind === 'furniture' ? this._roomAt(g.position.x, g.position.z) : null,
-    };
+    if (hit.kind === 'measure') {
+      const m = this.measures.find((x) => x.id === hit.id);
+      this._drag = {
+        id: hit.id, kind: 'measure', part: hit.part, moved: false,
+        before: this._snapshot([hit.id]),
+        baseP1: { ...m.p1 }, baseP2: { ...m.p2 }, startFloor: fp ? { x: fp.x, z: fp.z } : null,
+      };
+    } else {
+      this._drag = {
+        id: hit.id, kind: hit.kind, moved: false,
+        offX: g.position.x - (fp?.x ?? g.position.x), offZ: g.position.z - (fp?.z ?? g.position.z),
+        before: this._snapshot([hit.id]),
+        room: hit.kind === 'furniture' ? this._roomAt(g.position.x, g.position.z) : null,
+      };
+    }
     this.orbit.enabled = false;
   }
 
   _onMove(e) {
+    if (this.addMeasureMode && this._pendingP1) { this._updatePreview(e); return; }
     if (!this._drag) return;
     if (Math.hypot(e.clientX - this._down.x, e.clientY - this._down.y) > 3) this._drag.moved = true;
     if (!this._drag.moved) return;
@@ -132,16 +148,38 @@ export class Editor {
       if (this.boundariesOn && this._drag.room) ({ x: nx, z: nz } = this._clampToRoom(nx, nz, item, this._drag.room));
       item.x = g.position.x = nx;
       item.z = g.position.z = nz;
-    } else {
+    } else if (this._drag.kind === 'door') {
       const d = this.doors.find((x) => x.id === this._drag.id);
       d.along = d.ax === 'x' ? fp.x + this._drag.offX : fp.z + this._drag.offZ;
       this.shell.rebuildWalls(this.doors);
       this._syncDoorMesh(d);
+    } else {
+      const m = this.measures.find((x) => x.id === this._drag.id);
+      if (this._drag.part === 'p1') m.p1 = { x: snap(fp.x), z: snap(fp.z) };
+      else if (this._drag.part === 'p2') m.p2 = { x: snap(fp.x), z: snap(fp.z) };
+      else {
+        const dx = fp.x - this._drag.startFloor.x, dz = fp.z - this._drag.startFloor.z;
+        m.p1 = { x: snap(this._drag.baseP1.x + dx), z: snap(this._drag.baseP1.z + dz) };
+        m.p2 = { x: snap(this._drag.baseP2.x + dx), z: snap(this._drag.baseP2.z + dz) };
+      }
+      this._updateMeasure(g, m);
+      this.onSelect(this._selInfo());
     }
   }
 
   _onUp(e) {
     const moved = this._down ? Math.hypot(e.clientX - this._down.x, e.clientY - this._down.y) : 99;
+    if (this.addMeasureMode) {
+      if (moved < 5) {
+        const fp = this._floorPoint(e);
+        if (fp) {
+          const pt = { x: snap(fp.x), z: snap(fp.z) };
+          if (!this._pendingP1) { this._pendingP1 = pt; this._showPreview(pt); }
+          else { this._createMeasure(this._pendingP1, pt); this._pendingP1 = null; this._clearPreview(); this.setAddMeasureMode(false); }
+        }
+      }
+      this._down = null; return;
+    }
     if (this.addDoorMode) {
       this._ray.setFromCamera(this._ndc(e), this.camera);
       const hit = this._pick(this.shell.walls.children);
@@ -208,6 +246,82 @@ export class Editor {
   }
   _syncDoorMesh(d) { this._placeDoor(this.meshes.get(d.id), d); }
 
+  // ── measurement markers ─────────────────────────────────────────────────────
+  _buildMeasure(m) {
+    const g = new THREE.Group();
+    g.userData = { id: m.id, kind: 'measure' };
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf5871f, toneMapped: false });
+    g.userData.mat = mat;
+    const line = new THREE.Mesh(new THREE.BoxGeometry(1, 0.03, 0.12), mat);
+    line.name = 'body'; line.position.y = 0.1;
+    g.add(line);
+    for (const name of ['p1', 'p2']) {
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 16), mat);
+      h.name = name; h.position.y = 0.1;
+      g.add(h);
+    }
+    this._updateMeasure(g, m);
+    return g;
+  }
+
+  _updateMeasure(g, m) {
+    const dx = m.p2.x - m.p1.x, dz = m.p2.z - m.p1.z;
+    const len = Math.hypot(dx, dz);
+    const mx = (m.p1.x + m.p2.x) / 2, mz = (m.p1.z + m.p2.z) / 2;
+    const line = g.getObjectByName('body');
+    line.geometry.dispose();
+    line.geometry = new THREE.BoxGeometry(Math.max(len, 0.01), 0.03, 0.12);
+    line.position.set(mx, 0.1, mz);
+    line.rotation.y = Math.atan2(-dz, dx);
+    g.getObjectByName('p1').position.set(m.p1.x, 0.1, m.p1.z);
+    g.getObjectByName('p2').position.set(m.p2.x, 0.1, m.p2.z);
+    const old = g.getObjectByName('label');
+    if (old) { old.material.map.dispose(); old.material.dispose(); g.remove(old); }
+    const label = makeLabel(ftToStr(len), { size: 1.3, color: '#f5871f' });
+    label.name = 'label'; label.position.set(mx, 0.7, mz);
+    g.add(label);
+  }
+
+  _createMeasure(p1, p2) {
+    const m = { id: nextId(), kind: 'measure', p1: { ...p1 }, p2: { ...p2 } };
+    this.measures.push(m);
+    const g = this._buildMeasure(m);
+    this.measuresGroup.add(g); this.meshes.set(m.id, g);
+    this.select(m.id);
+    this._changed();
+    this._record('add', [m.id], [], this._snapshot([m.id]));
+  }
+
+  setAddMeasureMode(on) {
+    this.addMeasureMode = on;
+    if (!on) { this._pendingP1 = null; this._clearPreview(); }
+    this.renderer.domElement.style.cursor = on ? 'crosshair' : '';
+    this.onMeasureModeChange(on);
+  }
+
+  _showPreview(pt) {
+    this._clearPreview();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf5871f, toneMapped: false, transparent: true, opacity: 0.55 });
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.1), mat);
+    line.position.set(pt.x, 0.1, pt.z);
+    this._preview = { line, mat };
+    this.measuresGroup.add(line);
+  }
+  _updatePreview(e) {
+    if (!this._preview) return;
+    const fp = this._floorPoint(e);
+    if (!fp) return;
+    const p1 = this._pendingP1, dx = fp.x - p1.x, dz = fp.z - p1.z, len = Math.hypot(dx, dz);
+    const line = this._preview.line;
+    line.geometry.dispose();
+    line.geometry = new THREE.BoxGeometry(Math.max(len, 0.01), 0.03, 0.1);
+    line.position.set((p1.x + fp.x) / 2, 0.1, (p1.z + fp.z) / 2);
+    line.rotation.y = Math.atan2(-dz, dx);
+  }
+  _clearPreview() {
+    if (this._preview) { this.measuresGroup.remove(this._preview.line); this._preview.line.geometry.dispose(); this._preview.mat.dispose(); this._preview = null; }
+  }
+
   _rebuildBox(g, w, h, dep) {   // furniture geometry after resize
     const box = g.getObjectByName('box'), edges = g.getObjectByName('edges');
     box.geometry.dispose(); edges.geometry.dispose();
@@ -272,10 +386,14 @@ export class Editor {
     if (!g) return;
     this.selectedId = id;
     this.selectedKind = g.userData.kind;
-    g.getObjectByName('label').visible = true;
-    const edges = g.getObjectByName('edges');
-    edges.material.color.set('#2b6cff'); edges.material.opacity = 0.95;
-    if (this.selectedKind === 'furniture') this.gizmo.attach(g);
+    if (this.selectedKind === 'measure') {
+      g.userData.mat.color.set(0x2b6cff);
+    } else {
+      g.getObjectByName('label').visible = true;
+      const edges = g.getObjectByName('edges');
+      edges.material.color.set('#2b6cff'); edges.material.opacity = 0.95;
+      if (this.selectedKind === 'furniture') this.gizmo.attach(g);
+    }
     this.onSelect(this._selInfo());
   }
 
@@ -291,9 +409,13 @@ export class Editor {
     if (this.selectedId) {
       const g = this.meshes.get(this.selectedId);
       if (g) {
-        g.getObjectByName('label').visible = this.dimsVisible;
-        const edges = g.getObjectByName('edges');
-        edges.material.color.set(0x1c1c1e); edges.material.opacity = g.userData.kind === 'door' ? 0.4 : 0.28;
+        if (g.userData.kind === 'measure') {
+          g.userData.mat.color.set(0xf5871f);
+        } else {
+          g.getObjectByName('label').visible = this.dimsVisible;
+          const edges = g.getObjectByName('edges');
+          edges.material.color.set(0x1c1c1e); edges.material.opacity = g.userData.kind === 'door' ? 0.4 : 0.28;
+        }
       }
     }
     this.shell.highlightRoom(null);
@@ -303,7 +425,7 @@ export class Editor {
   }
 
   deleteSelected() {
-    if (this.selectedKind !== 'furniture' && this.selectedKind !== 'door') return;
+    if (!['furniture', 'door', 'measure'].includes(this.selectedKind)) return;
     const id = this.selectedId;
     const before = this._snapshot([id]);
     this._removeObject(id);              // disposes mesh, updates state, deselects, rebuilds walls
@@ -368,44 +490,59 @@ export class Editor {
 
   setDimsVisible(v) {
     this.dimsVisible = v;
-    for (const [id, g] of this.meshes) g.getObjectByName('label').visible = v || id === this.selectedId;
+    for (const [id, g] of this.meshes) {
+      if (g.userData.kind === 'measure') continue;   // measure labels always show their distance
+      g.getObjectByName('label').visible = v || id === this.selectedId;
+    }
   }
 
   clearAll() {
     this.deselect();
     for (const g of this.meshes.values()) {
-      (g.userData.kind === 'door' ? this.doorsGroup : this.itemsGroup).remove(g);
+      this._groupFor(g.userData.kind).remove(g);
       g.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
     }
-    this.meshes.clear(); this.items = []; this.doors = [];
+    this.meshes.clear(); this.items = []; this.doors = []; this.measures = [];
     this.shell.rebuildWalls([]);
     this.history?.clear();
     this._changed();
   }
 
+  _groupFor(kind) { return kind === 'door' ? this.doorsGroup : kind === 'measure' ? this.measuresGroup : this.itemsGroup; }
+
   loadState(state) {
     this.clearAll();
-    const items = state?.items || [];
-    const doors = state?.doors || [];
-    for (const raw of items) {
+    for (const raw of state?.items || []) {
       const item = { ...raw, kind: 'furniture', id: raw.id || nextId(), ry: raw.ry || 0 };
       this.items.push(item);
       const g = this._buildFurniture(item);
       this.itemsGroup.add(g); this.meshes.set(item.id, g);
     }
-    for (const raw of doors) {
+    for (const raw of state?.doors || []) {
       const d = { ...raw, kind: 'door', id: raw.id || nextId() };
       this.doors.push(d);
       const g = this._buildDoor(d);
       this.doorsGroup.add(g); this.meshes.set(d.id, g);
+    }
+    for (const raw of state?.measures || []) {
+      const m = { id: raw.id || nextId(), kind: 'measure', p1: { ...raw.p1 }, p2: { ...raw.p2 } };
+      this.measures.push(m);
+      const g = this._buildMeasure(m);
+      this.measuresGroup.add(g); this.meshes.set(m.id, g);
     }
     this.shell.rebuildWalls(this.doors);
     this._changed();
   }
 
   // ── low-level primitives (no onChange, no history) ──────────────────────────
-  _upsertObject(o) {   // create-or-update one furniture/door from plain data
+  _upsertObject(o) {   // create-or-update one furniture/door/measure from plain data
     const g = this.meshes.get(o.id);
+    if (o.kind === 'measure') {
+      const m = { id: o.id, kind: 'measure', p1: { ...o.p1 }, p2: { ...o.p2 } };
+      if (g) { const cur = this.measures.find((x) => x.id === o.id); cur.p1 = m.p1; cur.p2 = m.p2; this._updateMeasure(g, m); }
+      else { this.measures.push(m); const ng = this._buildMeasure(m); this.measuresGroup.add(ng); this.meshes.set(o.id, ng); }
+      return;
+    }
     if (o.kind === 'furniture') {
       const item = { ...o, kind: 'furniture', ry: o.ry || 0 };
       if (g) {
@@ -436,10 +573,11 @@ export class Editor {
     if (!g) return;
     const kind = g.userData.kind;
     if (this.selectedId === id) this.deselect();
-    (kind === 'door' ? this.doorsGroup : this.itemsGroup).remove(g);
+    this._groupFor(kind).remove(g);
     g.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
     this.meshes.delete(id);
     if (kind === 'door') { this.doors = this.doors.filter((x) => x.id !== id); this.shell.rebuildWalls(this.doors); }
+    else if (kind === 'measure') this.measures = this.measures.filter((x) => x.id !== id);
     else this.items = this.items.filter((i) => i.id !== id);
   }
 
@@ -448,7 +586,10 @@ export class Editor {
   removeRemote(id) { this._removeObject(id); }
 
   // ── history support ─────────────────────────────────────────────────────────
-  _snapshot(ids) { return ids.map((id) => this._byId(id)).filter(Boolean).map((o) => ({ ...o })); }
+  _snapshot(ids) {
+    return ids.map((id) => this._byId(id)).filter(Boolean)
+      .map((o) => o.kind === 'measure' ? { ...o, p1: { ...o.p1 }, p2: { ...o.p2 } } : { ...o });
+  }
   _record(op, ids, before, after, coalesce = false) {
     this.history?.record({ op, ids, before, after, coalesce });
   }
@@ -483,13 +624,23 @@ export class Editor {
     };
   }
 
-  getState() { return { items: this.items.map((i) => ({ ...i })), doors: this.doors.map((d) => ({ ...d })) }; }
+  getState() {
+    return {
+      items: this.items.map((i) => ({ ...i })),
+      doors: this.doors.map((d) => ({ ...d })),
+      measures: this.measures.map((m) => ({ ...m, p1: { ...m.p1 }, p2: { ...m.p2 } })),
+    };
+  }
 
-  _byId(id) { return this.items.find((i) => i.id === id) || this.doors.find((d) => d.id === id) || null; }
+  _byId(id) {
+    return this.items.find((i) => i.id === id) || this.doors.find((d) => d.id === id) || this.measures.find((m) => m.id === id) || null;
+  }
   _selInfo() {
     if (this.selectedKind === 'room') return { kind: 'room', ...this.selectedRoom };
     const o = this._byId(this.selectedId);
-    return o ? { ...o } : null;
+    if (!o) return null;
+    if (o.kind === 'measure') return { kind: 'measure', dist: Math.hypot(o.p2.x - o.p1.x, o.p2.z - o.p1.z) };
+    return { ...o };
   }
   _changed() { this.onChange(this.getState()); }
 }

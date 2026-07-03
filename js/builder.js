@@ -36,6 +36,33 @@ export function makeLabel(title, { sub = '', size = 1.3, color = '#1c1c1e' } = {
   return sprite;
 }
 
+// ── a dimension annotation drawn flat on the floor along a wall ──────────────
+// ax 'x' → horizontal line at z=fixed from x=a to x=b; ax 'z' → vertical at x=fixed.
+export function makeDimAnno(ax, fixed, a, b, text) {
+  const g = new THREE.Group();
+  const y = 0.06, lw = 0.09, tick = 0.6;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x2b6cff, toneMapped: false });
+  const box = (sx, sz, px, pz) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.02, sz), mat);
+    m.position.set(px, y, pz);
+    return m;
+  };
+  const mid = (a + b) / 2, len = b - a;
+  if (ax === 'x') {
+    g.add(box(len, lw, mid, fixed));
+    g.add(box(lw, tick, a, fixed));
+    g.add(box(lw, tick, b, fixed));
+  } else {
+    g.add(box(lw, len, fixed, mid));
+    g.add(box(tick, lw, fixed, a));
+    g.add(box(tick, lw, fixed, b));
+  }
+  const label = makeLabel(text, { size: 1.5, color: '#2b6cff' });
+  label.position.set(ax === 'x' ? mid : fixed, 0.55, ax === 'x' ? fixed : mid);
+  g.add(label);
+  return g;
+}
+
 // ── one wall box between from→to along an axis, spanning yBottom→yTop ─────────
 function wallBox(axis, fixed, from, to, yBottom, yTop, mat) {
   const len = to - from, h = yTop - yBottom;
@@ -140,9 +167,9 @@ export function buildApartment(scene) {
     const nl = makeLabel(r.name, { size: 2.1 });
     nl.position.set(cx, 1.3, cz);
     nameLabels.add(nl);
-    const dl = makeLabel(`${ftToStr(r.w)} × ${ftToStr(r.d)}`, { size: 1.7, color: '#2b6cff' });
-    dl.position.set(cx, 6.6, cz);
-    dimLabels.add(dl);
+    const wi = WALL_THICKNESS / 2, off = 0.9;
+    dimLabels.add(makeDimAnno('x', r.z + off, r.x + wi, r.x + r.w - wi, ftToStr(r.w)));   // width along top wall
+    dimLabels.add(makeDimAnno('z', r.x + off, r.z + wi, r.z + r.d - wi, ftToStr(r.d)));   // depth along left wall
   }
   group.add(nameLabels);
   group.add(dimLabels);

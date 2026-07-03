@@ -44,7 +44,7 @@ function buildPalette(editor, getDropPoint) {
 
 // ── Inspector (furniture / door / room / empty) ──────────────────────────────
 function bindInspector(editor) {
-  const empty = $('sel-empty'), furn = $('sel-furniture'), door = $('sel-door'), room = $('sel-room');
+  const empty = $('sel-empty'), furn = $('sel-furniture'), door = $('sel-door'), room = $('sel-room'), meas = $('sel-measure');
   const wIn = $('dim-w'), dIn = $('dim-d'), hIn = $('dim-h');
   const wFt = $('w-ft'), dFt = $('d-ft'), hFt = $('h-ft');
   const dwIn = $('door-w'), dhIn = $('door-h'), dwFt = $('door-w-ft'), dhFt = $('door-h-ft');
@@ -52,7 +52,7 @@ function bindInspector(editor) {
   const set = (el, v) => { if (document.activeElement !== el) el.value = v; };
 
   editor.onSelect = (info) => {
-    empty.hidden = furn.hidden = door.hidden = room.hidden = true;
+    empty.hidden = furn.hidden = door.hidden = room.hidden = meas.hidden = true;
     if (!info) { empty.hidden = false; return; }
     if (info.kind === 'furniture') {
       furn.hidden = false;
@@ -66,6 +66,9 @@ function bindInspector(editor) {
       door.hidden = false;
       set(dwIn, ftToIn(info.w)); dwFt.textContent = ` (${ftToStr(info.w)})`;
       set(dhIn, ftToIn(info.h)); dhFt.textContent = ` (${ftToStr(info.h)})`;
+    } else if (info.kind === 'measure') {
+      meas.hidden = false;
+      $('measure-dist').textContent = ftToStr(info.dist);
     } else if (info.kind === 'room') {
       room.hidden = false;
       $('room-name').textContent = info.name;
@@ -96,13 +99,17 @@ function bindInspector(editor) {
   };
   [dwIn, dhIn].forEach((el) => el.addEventListener('input', onDoor));
   $('door-delete').addEventListener('click', () => editor.deleteSelected());
+  $('measure-delete').addEventListener('click', () => editor.deleteSelected());
 }
 
-// ── Tools (add door) ──────────────────────────────────────────────────────────
+// ── Tools (add door, measure) ─────────────────────────────────────────────────
 function bindTools(editor) {
-  const btn = $('add-door'), hint = $('door-hint');
-  btn.addEventListener('click', () => editor.setAddDoorMode(!editor.addDoorMode));
-  editor.onModeChange = (on) => { btn.classList.toggle('is-on', on); btn.textContent = on ? 'Click a wall…' : 'Add a door'; hint.hidden = !on; };
+  const doorBtn = $('add-door'), doorHint = $('door-hint');
+  const measBtn = $('add-measure'), measHint = $('measure-hint');
+  doorBtn.addEventListener('click', () => { if (editor.addMeasureMode) editor.setAddMeasureMode(false); editor.setAddDoorMode(!editor.addDoorMode); });
+  measBtn.addEventListener('click', () => { if (editor.addDoorMode) editor.setAddDoorMode(false); editor.setAddMeasureMode(!editor.addMeasureMode); });
+  editor.onModeChange = (on) => { doorBtn.classList.toggle('is-on', on); doorBtn.textContent = on ? 'Click a wall…' : 'Add a door'; doorHint.hidden = !on; };
+  editor.onMeasureModeChange = (on) => { measBtn.classList.toggle('is-on', on); measBtn.textContent = on ? 'Click points…' : 'Measure'; measHint.hidden = !on; };
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────
@@ -156,7 +163,7 @@ function bindKeys(editor) {
     if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); editor.redo(); return; }
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); editor.deleteSelected(); }
-    else if (e.key === 'Escape') { if (editor.addDoorMode) editor.setAddDoorMode(false); else editor.deselect(); }
+    else if (e.key === 'Escape') { if (editor.addDoorMode) editor.setAddDoorMode(false); else if (editor.addMeasureMode) editor.setAddMeasureMode(false); else editor.deselect(); }
   });
 }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-01 (v5 — dimension lines, measure tool)
+
+Changed: Room dimensions now draw as blue lines on the floor along each room's walls (width along the top wall, depth along the left wall) with end ticks and the measurement, instead of a single number floating in the middle. Same "Dimensions" toggle.
+Added: Measure tool. Click "Measure," then click a start point and an end point to drop a ruler showing the distance. The marker stays; select it to see the distance or delete it, drag the whole line to move it, or drag either end dot to adjust. Measurements save and sync like everything else.
+
 ## 2026-07-01 (v4 — undo/redo, layouts, boundaries)
 
 Added: Undo and redo (buttons in the panel, plus ⌘Z / ⌘⇧Z). Covers adding, moving, rotating, resizing, recoloring, and deleting furniture and doors. Rapid edits (like a resize) collapse into a single undo step, and undo only affects your own changes in a shared room.

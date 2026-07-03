@@ -8,6 +8,7 @@ const KEY = 'potomac3d.layout.v1';
 const normalize = (data) => ({
   items: Array.isArray(data?.items) ? data.items : [],
   doors: Array.isArray(data?.doors) ? data.doors : [],
+  measures: Array.isArray(data?.measures) ? data.measures : [],
 });
 
 export function save(state) {
