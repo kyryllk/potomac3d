@@ -471,8 +471,12 @@ export class Editor {
     const c = Math.abs(Math.cos(item.ry || 0)), s = Math.abs(Math.sin(item.ry || 0));
     const hx = (item.w / 2) * c + (item.d / 2) * s;     // rotated footprint half-extents
     const hz = (item.w / 2) * s + (item.d / 2) * c;
-    const minX = room.x + hx, maxX = room.x + room.w - hx;
-    const minZ = room.z + hz, maxZ = room.z + room.d - hz;
+    // The room rect is the wall CENTERLINE; walls are WALL_THICKNESS thick centered
+    // on it. Inset by half the wall (plus a hair to avoid z-fighting) so a piece
+    // stops flush against the inner wall face, not overlapping into the wall.
+    const inset = WALL_THICKNESS / 2 + 0.02;
+    const minX = room.x + inset + hx, maxX = room.x + room.w - inset - hx;
+    const minZ = room.z + inset + hz, maxZ = room.z + room.d - inset - hz;
     return {
       x: minX <= maxX ? clamp(x, minX, maxX) : room.x + room.w / 2,
       z: minZ <= maxZ ? clamp(z, minZ, maxZ) : room.z + room.d / 2,
