@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-01 (v3 — multiplayer)
+
+Added: Real-time multiplayer. Share the link and everyone lands in the same room; adding, moving, resizing, or deleting furniture and doors shows up live for everyone, and the room is saved in the cloud (Supabase). A status pill in the header shows Live / Local only.
+Added: Rooms via the URL — `?room=potomac-3` is the default; use `?room=something-else` for a separate shared space.
+Note: To turn multiplayer on, set your Supabase URL + publishable key in `js/config.js` and run `supabase/schema.sql` once. With no key set, it runs local-only (saves to your browser) exactly as before.
+
 ## 2026-07-01 (v2)
 
 Added: Door tool — click "Add a door," then click any wall to drop an opening (eyeball the spot). Doors cut a real gap in the wall with a header above, and you can slide them along the wall and set width/height.

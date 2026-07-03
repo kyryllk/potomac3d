@@ -46,10 +46,22 @@ Push this folder to a GitHub repo, then Settings → Pages → deploy from `main
 root. The site is fully static, so the Pages URL just works and you can share the
 link.
 
+## Multiplayer (optional)
+
+Set your Supabase Project URL and **publishable** key in
+[`js/config.js`](js/config.js), and run [`supabase/schema.sql`](supabase/schema.sql)
+once in the Supabase SQL Editor. Then everyone who opens the link shares the same
+room and edits live. Rooms are set by the URL: `?room=potomac-3` is the default;
+`?room=anything` makes a separate shared space. The header shows a **Live** pill
+when connected, or **Local only** when no key is set (saves to your browser).
+
+The publishable key is a public browser key — safe to commit. The shared room is
+open (anyone with the link can edit); add a room password or sign-in later if you
+want it locked down.
+
 ## Roadmap
 
-- **Phase 1 (now):** single-player 3D sandbox — done.
-- **Phase 2:** real-time multiplayer — shared rooms via a link (`?room=…`) so
-  several people add/move furniture live, backed by a free Supabase project. The
-  scene is already one plain array of objects (see `js/storage.js`), so this
-  slots in without a rewrite.
+- **Phase 1:** single-player 3D sandbox — done.
+- **Phase 2:** real-time multiplayer — done (Supabase, one row per object).
+- **Next ideas:** presence (who else is here / live cursors), doors & windows
+  modeled from the drawing, per-room locking.

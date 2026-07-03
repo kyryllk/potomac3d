@@ -140,6 +140,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .panel--left.is-collapsed .panel__body { display: none; }
 .panel--left.is-collapsed #palette-collapse { transform: rotate(180deg); }
 
+/* Connection status pill */
+.netstatus { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: var(--label-2); background: var(--panel); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+.netstatus::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.netstatus.is-live { color: #1a8a4a; }
+.netstatus.is-connecting { color: #b7791f; }
+.netstatus.is-error { color: var(--danger); }
+.netstatus.is-offline { color: var(--label-2); }
+
 /* v2 additions */
 .tip { font-size: 11px; color: var(--label-2); line-height: 1.4; margin: 2px 0 12px; }
 .doorhint { padding: 0 12px 12px; font-size: 12px; color: var(--accent); }

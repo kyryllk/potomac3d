@@ -375,6 +375,46 @@ export class Editor {
     this._changed();
   }
 
+  // ── remote apply (multiplayer) — no onChange, so it never echoes back ────────
+  applyRemote(id, kind, data) {
+    const g = this.meshes.get(id);
+    if (kind === 'furniture') {
+      const item = { ...data, id, kind: 'furniture', ry: data.ry || 0 };
+      if (g) {
+        Object.assign(this.items.find((i) => i.id === id), item);
+        g.position.set(item.x, 0, item.z); g.rotation.y = item.ry;
+        this._rebuildBox(g, item.w, item.h, item.d);
+        g.getObjectByName('box').material.color.set(item.color);
+        this._relabel(g, item.label, furnLabel(item));
+      } else {
+        this.items.push(item);
+        const ng = this._buildFurniture(item);
+        this.itemsGroup.add(ng); this.meshes.set(id, ng);
+      }
+    } else {
+      const d = { ...data, id, kind: 'door' };
+      if (g) { Object.assign(this.doors.find((x) => x.id === id), d); }
+      else { this.doors.push(d); const ng = this._buildDoor(d); this.doorsGroup.add(ng); this.meshes.set(id, ng); }
+      this.shell.rebuildWalls(this.doors);
+      const gg = this.meshes.get(id);
+      this._rebuildDoorGeo(gg, d, WALL_THICKNESS + 0.06);
+      this._placeDoor(gg, d);
+      this._relabel(gg, 'Door', doorLabel(d));
+    }
+  }
+
+  removeRemote(id) {
+    const g = this.meshes.get(id);
+    if (!g) return;
+    const kind = g.userData.kind;
+    if (this.selectedId === id) this.deselect();
+    (kind === 'door' ? this.doorsGroup : this.itemsGroup).remove(g);
+    g.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
+    this.meshes.delete(id);
+    if (kind === 'door') { this.doors = this.doors.filter((x) => x.id !== id); this.shell.rebuildWalls(this.doors); }
+    else this.items = this.items.filter((i) => i.id !== id);
+  }
+
   getState() { return { items: this.items.map((i) => ({ ...i })), doors: this.doors.map((d) => ({ ...d })) }; }
 
   _byId(id) { return this.items.find((i) => i.id === id) || this.doors.find((d) => d.id === id) || null; }

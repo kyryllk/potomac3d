@@ -5,6 +5,7 @@ import { Editor } from './editor.js';
 import { initUI } from './ui.js';
 import * as storage from './storage.js';
 import { BOUNDS } from './floorplan.js';
+import { SUPABASE } from './config.js';
 
 // ── Renderer ────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('scene');
@@ -78,16 +79,29 @@ scene.add(grid);
 const shell = buildApartment(scene);
 const editor = new Editor(scene, camera, renderer, orbit, shell);
 
-// autosave (debounced) on any change
+// on any change: save locally (debounced) and, if online, push to the shared room
+let sync = null;
 let saveTimer = null;
 editor.onChange = (state) => {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => storage.save(state), 400);
+  saveTimer = setTimeout(() => { storage.save(state); sync?.push(state); }, 300);
 };
 
-// restore last layout
-const saved = storage.load();
-if (saved.items.length || saved.doors.length) editor.loadState(saved);
+// connection status pill in the titlebar
+function setNetStatus(state, room) {
+  const el = document.getElementById('netstatus');
+  if (!el) return;
+  const map = {
+    connecting: ['is-connecting', `Connecting… · ${room || ''}`],
+    live: ['is-live', `Live · ${room}`],
+    error: ['is-error', 'Offline (sync error)'],
+    offline: ['is-offline', 'Local only'],
+  };
+  const [cls, text] = map[state] || map.offline;
+  el.className = `netstatus ${cls}`;
+  el.textContent = text;
+  el.hidden = false;
+}
 
 // ── UI ──────────────────────────────────────────────────────────────────────
 initUI({
@@ -115,3 +129,23 @@ renderer.setAnimationLoop(() => {
   orbit.update();
   renderer.render(scene, camera);
 });
+
+// ── Multiplayer (if configured) or local-only restore — non-blocking ──────────
+(async () => {
+  if (SUPABASE.url && SUPABASE.key) {
+    try {
+      const { Sync } = await import('./sync.js');
+      sync = new Sync(editor, SUPABASE, setNetStatus);
+      await sync.start();
+    } catch (e) {
+      console.warn('Multiplayer unavailable, falling back to local-only:', e);
+      setNetStatus('error');
+      const saved = storage.load();
+      if (saved.items.length || saved.doors.length) editor.loadState(saved);
+    }
+  } else {
+    const saved = storage.load();
+    if (saved.items.length || saved.doors.length) editor.loadState(saved);
+    setNetStatus('offline');
+  }
+})();
