@@ -22,12 +22,20 @@ layout experimentation. Meant to be hosted on personal GitHub Pages and shared.
 - `js/floorplan.js` — **the apartment dimensions**, in feet. Edit here to reshape
   the model. Walls/floors/labels are generated from it (`js/builder.js`).
 - `js/furniture.js` — the furniture catalog (real-world sizes in feet).
-- `js/editor.js` — owns scene state as `items: [{id,type,x,z,ry,w,d,h,color}]`,
-  one mesh per item. This array is the single source of truth; storage and
-  (future) multiplayer just mirror it.
-- `js/storage.js` — localStorage + JSON export/import. Phase 2 swaps in Supabase
-  here without touching the editor.
+- `js/editor.js` — owns scene state as `items` (furniture) + `doors`, one mesh
+  per object. These arrays are the single source of truth; storage and
+  multiplayer just mirror them. `applyRemote`/`removeRemote` apply other people's
+  changes without emitting `onChange` (so they never echo back).
+- `js/storage.js` — localStorage + JSON export/import (local-only fallback).
+- `js/sync.js` — multiplayer over Supabase: one row per object in table
+  `objects`, realtime both ways, client-side room filter, echo suppression via a
+  canonical signature per object. Loaded lazily; only active when a key is set.
+- `js/config.js` — Supabase URL + **publishable** key (public, safe to commit)
+  and the default room. Empty key ⇒ local-only mode.
+- `supabase/schema.sql` — run once to create the `objects` table + open RLS +
+  realtime. Rooms are per `?room=` URL param (default `potomac-3`).
 - `js/ui.js`, `js/main.js`, `js/units.js` — DOM wiring, bootstrap, unit helpers.
+- **Never commit the Supabase `sb_secret_…` key.** Only the publishable key ships.
 
 ## Conventions
 
