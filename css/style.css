@@ -26,6 +26,8 @@
 }
 
 * { box-sizing: border-box; }
+/* the [hidden] attribute must win over component display rules (display:flex etc.) */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
   font-family: var(--font);
@@ -147,6 +149,42 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .netstatus.is-connecting { color: #b7791f; }
 .netstatus.is-error { color: var(--danger); }
 .netstatus.is-offline { color: var(--label-2); }
+
+/* Disabled buttons (undo/redo) */
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:disabled:hover { background: var(--panel-solid); transform: none; }
+
+/* Layout switcher */
+.layoutbar { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 30; }
+.layout-btn { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--label); background: var(--panel); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6); border: 1px solid var(--border); border-radius: 999px; padding: 5px 14px; cursor: pointer; box-shadow: var(--shadow); }
+.layout-btn:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel-solid)); }
+.layout-btn .chev { color: var(--label-2); font-size: 10px; }
+.menu { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); min-width: 230px; background: var(--panel-solid); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 31; max-height: 62vh; overflow-y: auto; }
+.menu-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-family: var(--font); font-size: 13px; color: var(--label); background: transparent; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.menu-item:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.menu-item.is-current { font-weight: 600; }
+.menu-item.is-disabled { opacity: 0.4; cursor: default; }
+.menu-item.is-disabled:hover { background: transparent; }
+.mi-check { width: 12px; color: var(--accent); }
+.mi-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-ic { width: 14px; text-align: center; color: var(--label-2); }
+.menu-div { height: 1px; background: var(--border); margin: 6px 4px; }
+
+/* Modal (new-layout picker) */
+.modal-scrim { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.28); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.modal { width: 340px; max-width: calc(100vw - 32px); background: var(--panel-solid); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); padding: 18px; }
+.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.modal-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--label-2); }
+.modal-field input { font-family: var(--font); font-size: 14px; color: var(--label); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; }
+.modal-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.modal-sub { font-size: 12px; color: var(--label-2); margin: 14px 0 8px; }
+.pick-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.pick-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 13px; border-radius: 8px; cursor: pointer; }
+.pick-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.pick-empty { padding: 10px; font-size: 12px; color: var(--label-2); }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+.btn--primary { color: #fff; background: var(--accent); border-color: transparent; }
+.btn--primary:hover { background: color-mix(in srgb, #000 8%, var(--accent)); }
 
 /* v2 additions */
 .tip { font-size: 11px; color: var(--label-2); line-height: 1.4; margin: 2px 0 12px; }

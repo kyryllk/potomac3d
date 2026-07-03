@@ -23,6 +23,14 @@
     <div class="netstatus is-offline" id="netstatus" hidden>Local only</div>
   </header>
 
+  <!-- Layout switcher (shown when online) -->
+  <div class="layoutbar" id="layoutbar" hidden>
+    <button class="layout-btn" id="layout-btn" aria-haspopup="true" aria-expanded="false">
+      <span id="layout-name">Layout</span><span class="chev">⌄</span>
+    </button>
+    <div class="menu" id="layout-menu" hidden><!-- built by ui.js --></div>
+  </div>
+
   <!-- Add furniture -->
   <aside class="panel panel--left" id="palette">
     <div class="panel__head">
@@ -34,6 +42,14 @@
 
   <!-- Inspector + tools -->
   <aside class="panel panel--right" id="inspector">
+    <!-- Undo / redo -->
+    <section class="block">
+      <div class="row btns2">
+        <button class="btn" id="undo" disabled title="Undo (⌘Z)">↶ Undo</button>
+        <button class="btn" id="redo" disabled title="Redo (⌘⇧Z)">Redo ↷</button>
+      </div>
+    </section>
+
     <!-- Selection -->
     <section class="block" id="selection">
       <div class="panel__head"><h2>Selection</h2></div>
@@ -110,6 +126,9 @@
           <button data-mode="hidden" class="seg__btn">Off</button>
         </div>
       </label>
+      <label class="row toggle" title="Keep furniture inside its room when dragging">Keep in room
+        <input type="checkbox" id="toggle-bounds" />
+      </label>
       <label class="row toggle">Dimensions
         <input type="checkbox" id="toggle-dims" />
       </label>
@@ -141,6 +160,22 @@
   <footer class="hint">
     Drag to orbit · scroll to zoom · right-drag to pan · hold a piece to move · <kbd>Del</kbd> removes selected
   </footer>
+
+  <!-- New-layout-from-current picker -->
+  <div class="modal-scrim" id="pick-scrim" hidden>
+    <div class="modal">
+      <div class="modal-title" id="pick-title">New layout from current</div>
+      <label class="modal-field">Name
+        <input type="text" id="pick-name" placeholder="Layout name" />
+      </label>
+      <div class="modal-sub" id="pick-sub">Copy which pieces into it?</div>
+      <div class="pick-list" id="pick-list"><!-- built by ui.js --></div>
+      <div class="modal-actions">
+        <button class="btn" id="pick-cancel">Cancel</button>
+        <button class="btn btn--primary" id="pick-create">Create</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

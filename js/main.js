@@ -6,6 +6,7 @@ import { initUI } from './ui.js';
 import * as storage from './storage.js';
 import { BOUNDS } from './floorplan.js';
 import { SUPABASE } from './config.js';
+import { History } from './history.js';
 
 // ── Renderer ────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('scene');
@@ -79,6 +80,10 @@ scene.add(grid);
 const shell = buildApartment(scene);
 const editor = new Editor(scene, camera, renderer, orbit, shell);
 
+// undo/redo history — restores touched objects via the editor's apply path
+const history = new History((objs, ids) => editor._restore(objs, ids));
+editor.history = history;
+
 // on any change: save locally (debounced) and, if online, push to the shared room
 let sync = null;
 let saveTimer = null;
@@ -104,13 +109,15 @@ function setNetStatus(state, room) {
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
-initUI({
+const ui = initUI({
   editor,
   shell,
+  history,
   resetView,
   topView,
   setGrid: (v) => { grid.visible = v; },
   setDims: (v) => { shell.setDimsVisible(v); editor.setDimsVisible(v); },
+  setBoundaries: (v) => editor.setBoundaries(v),
   getDropPoint: () => ({
     x: THREE.MathUtils.clamp(orbit.target.x, BOUNDS.minX + 1, BOUNDS.maxX - 1),
     z: THREE.MathUtils.clamp(orbit.target.z, BOUNDS.minZ + 1, BOUNDS.maxZ - 1),
@@ -136,7 +143,19 @@ renderer.setAnimationLoop(() => {
     try {
       const { Sync } = await import('./sync.js');
       sync = new Sync(editor, SUPABASE, setNetStatus);
+      sync.onLayouts = (list, current) => ui.updateLayouts(list, current);
+      sync.onLayoutSwitched = (slug) => ui.updateLayouts(sync.layouts, slug);
       await sync.start();
+      ui.enableLayouts({
+        switch: (s) => sync.switchLayout(s),
+        create: (name, objs) => sync.createLayout(name, objs),
+        rename: (s, name) => sync.renameLayout(s, name),
+        remove: (s) => sync.deleteLayout(s),
+        current: () => sync.room,
+        currentFurniture: () => editor.items.map((i) => ({ id: i.id, label: i.label })),
+        objectsByIds: (ids) => [...editor.items, ...editor.doors].filter((o) => ids.includes(o.id)),
+        allObjects: () => [...editor.items, ...editor.doors],
+      });
     } catch (e) {
       console.warn('Multiplayer unavailable, falling back to local-only:', e);
       setNetStatus('error');

@@ -5,7 +5,9 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { catalogItem } from './furniture.js';
 import { makeLabel } from './builder.js';
 import { ftToStr } from './units.js';
-import { ft, WALL_THICKNESS } from './floorplan.js';
+import { ft, WALL_THICKNESS, ROOMS, BATH } from './floorplan.js';
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 let idSeq = 1;
 const nextId = () => `f${(idSeq++).toString(36)}${Math.floor(performance.now()).toString(36)}`;
@@ -27,6 +29,8 @@ export class Editor {
     this.selectedRoom = null;
     this.dimsVisible = false;
     this.addDoorMode = false;
+    this.boundariesOn = false;       // keep furniture inside its room when dragging
+    this.history = null;             // set by main.js; records undoable edits
 
     this.itemsGroup = new THREE.Group(); this.itemsGroup.name = 'furniture'; scene.add(this.itemsGroup);
     this.doorsGroup = new THREE.Group(); this.doorsGroup.name = 'doors'; scene.add(this.doorsGroup);
@@ -51,7 +55,11 @@ export class Editor {
     t.setMode('rotate');
     t.showX = false; t.showZ = false; t.showY = true;
     t.setRotationSnap(THREE.MathUtils.degToRad(5));
-    t.addEventListener('dragging-changed', (e) => { this.orbit.enabled = !e.value; });
+    t.addEventListener('dragging-changed', (e) => {
+      this.orbit.enabled = !e.value;
+      if (e.value) { this._rotBefore = this._snapshot([this.selectedId]); }
+      else if (this._rotBefore) { this._record('rotate', [this.selectedId], this._rotBefore, this._snapshot([this.selectedId])); this._rotBefore = null; }
+    });
     t.addEventListener('objectChange', () => {
       const item = this._byId(this.selectedId);
       if (item && this.selectedKind === 'furniture') {
@@ -102,7 +110,12 @@ export class Editor {
     this.select(hit.id);
     const fp = this._floorPoint(e);
     const g = this.meshes.get(hit.id);
-    this._drag = { id: hit.id, kind: hit.kind, moved: false, offX: g.position.x - (fp?.x ?? g.position.x), offZ: g.position.z - (fp?.z ?? g.position.z) };
+    this._drag = {
+      id: hit.id, kind: hit.kind, moved: false,
+      offX: g.position.x - (fp?.x ?? g.position.x), offZ: g.position.z - (fp?.z ?? g.position.z),
+      before: this._snapshot([hit.id]),
+      room: hit.kind === 'furniture' ? this._roomAt(g.position.x, g.position.z) : null,
+    };
     this.orbit.enabled = false;
   }
 
@@ -115,8 +128,10 @@ export class Editor {
     const g = this.meshes.get(this._drag.id);
     if (this._drag.kind === 'furniture') {
       const item = this._byId(this._drag.id);
-      item.x = g.position.x = snap(fp.x + this._drag.offX);
-      item.z = g.position.z = snap(fp.z + this._drag.offZ);
+      let nx = snap(fp.x + this._drag.offX), nz = snap(fp.z + this._drag.offZ);
+      if (this.boundariesOn && this._drag.room) ({ x: nx, z: nz } = this._clampToRoom(nx, nz, item, this._drag.room));
+      item.x = g.position.x = nx;
+      item.z = g.position.z = nz;
     } else {
       const d = this.doors.find((x) => x.id === this._drag.id);
       d.along = d.ax === 'x' ? fp.x + this._drag.offX : fp.z + this._drag.offZ;
@@ -136,7 +151,11 @@ export class Editor {
     }
     if (this._drag) {
       this.orbit.enabled = true;
-      if (this._drag.moved) { this.onSelect(this._selInfo()); this._changed(); }
+      if (this._drag.moved) {
+        this.onSelect(this._selInfo());
+        this._changed();
+        this._record('move', [this._drag.id], this._drag.before, this._snapshot([this._drag.id]));
+      }
       this._drag = null; this._down = null; return;
     }
     if (moved < 5) {                                     // a click on empty space or a room
@@ -218,6 +237,7 @@ export class Editor {
     this.itemsGroup.add(g); this.meshes.set(item.id, g);
     this.select(item.id);
     this._changed();
+    this._record('add', [item.id], [], [{ ...item }]);
     return item;
   }
 
@@ -242,6 +262,7 @@ export class Editor {
     this.doorsGroup.add(g); this.meshes.set(door.id, g);
     this.select(door.id);
     this._changed();
+    this._record('add', [door.id], [], [{ ...door }]);
   }
 
   select(id) {
@@ -282,33 +303,30 @@ export class Editor {
   }
 
   deleteSelected() {
-    if (this.selectedKind === 'furniture' || this.selectedKind === 'door') {
-      const id = this.selectedId, g = this.meshes.get(id);
-      this.gizmo.detach();
-      (g.userData.kind === 'door' ? this.doorsGroup : this.itemsGroup).remove(g);
-      g.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); });
-      this.meshes.delete(id);
-      if (g.userData.kind === 'door') { this.doors = this.doors.filter((d) => d.id !== id); this.shell.rebuildWalls(this.doors); }
-      else this.items = this.items.filter((i) => i.id !== id);
-      this.selectedId = null; this.selectedKind = null;
-      this.onSelect(null);
-      this._changed();
-    }
+    if (this.selectedKind !== 'furniture' && this.selectedKind !== 'door') return;
+    const id = this.selectedId;
+    const before = this._snapshot([id]);
+    this._removeObject(id);              // disposes mesh, updates state, deselects, rebuilds walls
+    this._changed();
+    this._record('delete', [id], before, []);
   }
 
   setDimensions({ w, d, h }) {
     const item = this._byId(this.selectedId);
     if (!item || this.selectedKind !== 'furniture') return;
+    const before = this._snapshot([item.id]);
     if (w != null) item.w = w; if (d != null) item.d = d; if (h != null) item.h = h;
     const g = this.meshes.get(item.id);
     this._rebuildBox(g, item.w, item.h, item.d);
     this._relabel(g, item.label, furnLabel(item));
     this._changed();
+    this._record('size', [item.id], before, this._snapshot([item.id]), true);
   }
 
   setDoorSize({ w, h }) {
     const dr = this.doors.find((x) => x.id === this.selectedId);
     if (!dr) return;
+    const before = this._snapshot([dr.id]);
     if (w != null) dr.w = w; if (h != null) dr.h = h;
     this.shell.rebuildWalls(this.doors);
     const g = this.meshes.get(dr.id);
@@ -316,6 +334,7 @@ export class Editor {
     this._rebuildDoorGeo(g, dr, th);
     this._relabel(g, 'Door', doorLabel(dr));
     this._changed();
+    this._record('size', [dr.id], before, this._snapshot([dr.id]), true);
   }
   _rebuildDoorGeo(g, d, th) {
     const box = g.getObjectByName('box'), edges = g.getObjectByName('edges');
@@ -329,15 +348,23 @@ export class Editor {
   setRotation(ry) {
     const item = this._byId(this.selectedId);
     if (!item || this.selectedKind !== 'furniture') return;
+    const before = this._snapshot([item.id]);
     item.ry = ry; this.meshes.get(item.id).rotation.y = ry;
     this._changed();
+    this._record('rotate', [item.id], before, this._snapshot([item.id]), true);
   }
   setColor(hex) {
     const item = this._byId(this.selectedId);
     if (!item || this.selectedKind !== 'furniture') return;
+    const before = this._snapshot([item.id]);
     item.color = hex; this.meshes.get(item.id).getObjectByName('box').material.color.set(hex);
     this._changed();
+    this._record('color', [item.id], before, this._snapshot([item.id]), true);
   }
+
+  setBoundaries(on) { this.boundariesOn = on; }
+  undo() { this.history?.undo(); }
+  redo() { this.history?.redo(); }
 
   setDimsVisible(v) {
     this.dimsVisible = v;
@@ -352,6 +379,7 @@ export class Editor {
     }
     this.meshes.clear(); this.items = []; this.doors = [];
     this.shell.rebuildWalls([]);
+    this.history?.clear();
     this._changed();
   }
 
@@ -375,13 +403,13 @@ export class Editor {
     this._changed();
   }
 
-  // ── remote apply (multiplayer) — no onChange, so it never echoes back ────────
-  applyRemote(id, kind, data) {
-    const g = this.meshes.get(id);
-    if (kind === 'furniture') {
-      const item = { ...data, id, kind: 'furniture', ry: data.ry || 0 };
+  // ── low-level primitives (no onChange, no history) ──────────────────────────
+  _upsertObject(o) {   // create-or-update one furniture/door from plain data
+    const g = this.meshes.get(o.id);
+    if (o.kind === 'furniture') {
+      const item = { ...o, kind: 'furniture', ry: o.ry || 0 };
       if (g) {
-        Object.assign(this.items.find((i) => i.id === id), item);
+        Object.assign(this.items.find((i) => i.id === o.id), item);
         g.position.set(item.x, 0, item.z); g.rotation.y = item.ry;
         this._rebuildBox(g, item.w, item.h, item.d);
         g.getObjectByName('box').material.color.set(item.color);
@@ -389,21 +417,21 @@ export class Editor {
       } else {
         this.items.push(item);
         const ng = this._buildFurniture(item);
-        this.itemsGroup.add(ng); this.meshes.set(id, ng);
+        this.itemsGroup.add(ng); this.meshes.set(o.id, ng);
       }
     } else {
-      const d = { ...data, id, kind: 'door' };
-      if (g) { Object.assign(this.doors.find((x) => x.id === id), d); }
-      else { this.doors.push(d); const ng = this._buildDoor(d); this.doorsGroup.add(ng); this.meshes.set(id, ng); }
+      const d = { ...o, kind: 'door' };
+      if (g) Object.assign(this.doors.find((x) => x.id === o.id), d);
+      else { this.doors.push(d); const ng = this._buildDoor(d); this.doorsGroup.add(ng); this.meshes.set(o.id, ng); }
       this.shell.rebuildWalls(this.doors);
-      const gg = this.meshes.get(id);
+      const gg = this.meshes.get(o.id);
       this._rebuildDoorGeo(gg, d, WALL_THICKNESS + 0.06);
       this._placeDoor(gg, d);
       this._relabel(gg, 'Door', doorLabel(d));
     }
   }
 
-  removeRemote(id) {
+  _removeObject(id) {
     const g = this.meshes.get(id);
     if (!g) return;
     const kind = g.userData.kind;
@@ -413,6 +441,42 @@ export class Editor {
     this.meshes.delete(id);
     if (kind === 'door') { this.doors = this.doors.filter((x) => x.id !== id); this.shell.rebuildWalls(this.doors); }
     else this.items = this.items.filter((i) => i.id !== id);
+  }
+
+  // ── remote apply (multiplayer) — no onChange, so it never echoes back ────────
+  applyRemote(id, kind, data) { this._upsertObject({ ...data, id, kind }); }
+  removeRemote(id) { this._removeObject(id); }
+
+  // ── history support ─────────────────────────────────────────────────────────
+  _snapshot(ids) { return ids.map((id) => this._byId(id)).filter(Boolean).map((o) => ({ ...o })); }
+  _record(op, ids, before, after, coalesce = false) {
+    this.history?.record({ op, ids, before, after, coalesce });
+  }
+  // restore the given ids to `objs` (used by undo/redo). Pushes to sync/save.
+  _restore(objs, ids) {
+    for (const id of ids) {
+      const t = objs.find((o) => o.id === id);
+      if (t) this._upsertObject(t); else this._removeObject(id);
+    }
+    const first = ids[0];
+    if (objs.find((o) => o.id === first)) this.select(first); else this.deselect();
+    this._changed();
+  }
+
+  // ── boundaries ──────────────────────────────────────────────────────────────
+  _roomAt(x, z) {
+    return [...ROOMS, BATH].find((r) => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d) || null;
+  }
+  _clampToRoom(x, z, item, room) {
+    const c = Math.abs(Math.cos(item.ry || 0)), s = Math.abs(Math.sin(item.ry || 0));
+    const hx = (item.w / 2) * c + (item.d / 2) * s;     // rotated footprint half-extents
+    const hz = (item.w / 2) * s + (item.d / 2) * c;
+    const minX = room.x + hx, maxX = room.x + room.w - hx;
+    const minZ = room.z + hz, maxZ = room.z + room.d - hz;
+    return {
+      x: minX <= maxX ? clamp(x, minX, maxX) : room.x + room.w / 2,
+      z: minZ <= maxZ ? clamp(z, minZ, maxZ) : room.z + room.d / 2,
+    };
   }
 
   getState() { return { items: this.items.map((i) => ({ ...i })), doors: this.doors.map((d) => ({ ...d })) }; }

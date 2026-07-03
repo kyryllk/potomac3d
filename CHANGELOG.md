@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-01 (v4 — undo/redo, layouts, boundaries)
+
+Added: Undo and redo (buttons in the panel, plus ⌘Z / ⌘⇧Z). Covers adding, moving, rotating, resizing, recoloring, and deleting furniture and doors. Rapid edits (like a resize) collapse into a single undo step, and undo only affects your own changes in a shared room.
+Added: Layouts. A switcher by the title lets you keep multiple furniture arrangements: pick a layout, create a new empty one, create one from the current furniture (choose which pieces to copy), duplicate, rename, or delete. Each layout has its own link (`?room=…`), and switching is per-person like tabs.
+Added: "Keep in room" toggle. When on, dragging a piece that sits inside a room keeps it within that room's walls (accounting for how it's turned). Turn it off to move pieces between rooms.
+Fixed: The new-layout dialog was showing on page load because a component style overrode the hidden attribute; hidden elements now stay hidden.
+
 ## 2026-07-01 (v3 — multiplayer)
 
 Added: Real-time multiplayer. Share the link and everyone lands in the same room; adding, moving, resizing, or deleting furniture and doors shows up live for everyone, and the room is saved in the cloud (Supabase). A status pill in the header shows Live / Local only.
